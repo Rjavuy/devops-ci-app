@@ -49,10 +49,8 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME/actions-runner"
           cd "$HOME/actions-runner"
-          url="$(curl -sSL -H 'Accept: application/vnd.github+json' \
-            https://api.github.com/repos/actions/runner/releases/latest \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(a["browser_download_url"] for a in d["assets"] if a["name"].startswith("actions-runner-linux-x64-")))')"
-          curl -sSL -o runner.tar.gz "$url"
+          curl -sSL -o runner.tar.gz \
+            https://github.com/actions/runner/releases/download/v2.338.2/actions-runner-linux-x64-2.338.2.tar.gz
           tar xzf runner.tar.gz
           ./bin/installdependencies.sh || true
 
