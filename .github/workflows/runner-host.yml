@@ -1,0 +1,70 @@
+name: Temporary self-hosted runner for KR3
+
+# Временный агент с меткой devops-vm. Локальной VM/WSL нет, поэтому агент
+# совмещает управляющий и управляемый узлы и подключается к себе по SSH.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Ansible and collections
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ansible openssh-server
+          ansible --version | head -2
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Prepare managed node over loopback
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keygen -q -t ed25519 -N '' -f "$HOME/.ssh/devops_vm"
+          chmod 600 "$HOME/.ssh/devops_vm"
+          sudo useradd -m -s /bin/bash devops
+          echo 'devops ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/devops >/dev/null
+          sudo mkdir -p /home/devops/.ssh
+          sudo cp "$HOME/.ssh/devops_vm.pub" /home/devops/.ssh/authorized_keys
+          sudo chown -R devops:devops /home/devops/.ssh
+          sudo chmod 700 /home/devops/.ssh
+          sudo chmod 600 /home/devops/.ssh/authorized_keys
+          sudo systemctl start ssh
+          ssh-keyscan -H 127.0.0.1 >> "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/devops_vm" -o BatchMode=yes devops@127.0.0.1 \
+            "whoami && sudo -n true && echo sudo-ok"
+
+      - name: Download runner binary
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/actions-runner"
+          cd "$HOME/actions-runner"
+          url="$(curl -sSL -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/actions/runner/releases/latest \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(a["browser_download_url"] for a in d["assets"] if a["name"].startswith("actions-runner-linux-x64-")))')"
+          curl -sSL -o runner.tar.gz "$url"
+          tar xzf runner.tar.gz
+          ./bin/installdependencies.sh || true
+
+      - name: Configure runner
+        env:
+          RUNNER_TOKEN: ${{ secrets.RUNNER_REGISTRATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "$HOME/actions-runner"
+          ./config.sh --url https://github.com/Rjavuy/devops-ci-app \
+            --token "$RUNNER_TOKEN" --labels devops-vm --unattended --replace \
+            --name kr3-temporary-runner
+
+      - name: Listen for jobs
+        run: |
+          cd "$HOME/actions-runner"
+          ./run.sh
