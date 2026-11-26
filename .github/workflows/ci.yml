@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
@@ -16,6 +17,8 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,6 +40,8 @@ jobs:
   test:
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
