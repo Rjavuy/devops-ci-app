@@ -4,6 +4,8 @@ name: Temporary self-hosted runner for KR3
 # совмещает управляющий и управляемый узлы и подключается к себе по SSH.
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/cd]
 
 permissions:
   contents: read
