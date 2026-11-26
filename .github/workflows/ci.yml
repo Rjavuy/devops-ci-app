@@ -185,5 +185,3 @@ jobs:
           payload = json.loads(Path("/tmp/kr3-health.json").read_text(encoding="utf-8"))
           assert payload == {"status": "ok"}, f"unexpected /health payload: {payload}"
           PY
-          curl -sS --fail "http://$VM_HOST/" | tee /tmp/kr3-index.json
-          echo
