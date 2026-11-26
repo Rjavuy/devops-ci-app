@@ -5,7 +5,7 @@ name: Temporary self-hosted runner for KR3
 on:
   workflow_dispatch:
   push:
-    branches: [feature/cd]
+    branches: [feature/cd, fix/runner-lifecycle]
 
 permissions:
   contents: read
@@ -67,4 +67,13 @@ jobs:
       - name: Listen for jobs
         run: |
           cd "$HOME/actions-runner"
-          ./run.sh
+          unset RUNNER_TEMP RUNNER_TOOLCACHE RUNNER_WORKSPACE RUNNER_TRACKING_ID
+          unset ACTIONS_RUNTIME_URL ACTIONS_RUNTIME_TOKEN ACTIONS_CACHE_URL
+          unset GITHUB_ACTIONS GITHUB_WORKFLOW GITHUB_RUN_ID GITHUB_JOB
+          unset GITHUB_ACTION GITHUB_REF GITHUB_SHA GITHUB_REPOSITORY GITHUB_EVENT_NAME
+          for attempt in $(seq 1 10); do
+            echo "Starting runner iteration $attempt"
+            ./run.sh || true
+            echo "Runner exited after iteration $attempt, restarting"
+            sleep 3
+          done
