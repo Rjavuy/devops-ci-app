@@ -71,6 +71,9 @@ jobs:
           unset ACTIONS_RUNTIME_URL ACTIONS_RUNTIME_TOKEN ACTIONS_CACHE_URL
           unset GITHUB_ACTIONS GITHUB_WORKFLOW GITHUB_RUN_ID GITHUB_JOB
           unset GITHUB_ACTION GITHUB_REF GITHUB_SHA GITHUB_REPOSITORY GITHUB_EVENT_NAME
-          setsid nohup ./run.sh </dev/null >runner.log 2>&1 &
-          echo "runner pid $!"
-          tail -f runner.log
+          for attempt in $(seq 1 10); do
+            echo "Starting runner iteration $attempt"
+            ./run.sh || true
+            echo "Runner exited after iteration $attempt, restarting"
+            sleep 3
+          done
