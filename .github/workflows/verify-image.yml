@@ -1,0 +1,74 @@
+name: Verify published image
+
+# Проверка опубликованного образа на отдельном узле с Docker (GitHub-hosted runner).
+# Пакет является публичным, поэтому docker pull выполняется без логина.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Полный SHA последнего зелёного коммита"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Pull and run latest
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE_NAME}:latest"
+          docker run -d --name ci-app -p 127.0.0.1:5001:5000 "${IMAGE_NAME}:latest"
+      - name: Check latest
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in {1..15}; do
+            if curl --fail --silent --show-error --max-time 2 \
+              http://127.0.0.1:5001/health --output health-latest.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::/health did not respond for :latest"
+            docker logs ci-app
+            exit 1
+          fi
+          python3 -m json.tool health-latest.json
+          docker exec ci-app id
+          docker logs ci-app
+      - name: Pull and run by SHA
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE_NAME}:${{ inputs.sha }}"
+          docker run -d --name ci-app-sha -p 127.0.0.1:5002:5000 "${IMAGE_NAME}:${{ inputs.sha }}"
+      - name: Check SHA image
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in {1..15}; do
+            if curl --fail --silent --show-error --max-time 2 \
+              http://127.0.0.1:5002/health --output health-sha.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::/health did not respond for :${{ inputs.sha }}"
+            docker logs ci-app-sha
+            exit 1
+          fi
+          python3 -m json.tool health-sha.json
+          docker exec ci-app-sha id
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f ci-app ci-app-sha >/dev/null 2>&1 || true
